@@ -41,6 +41,8 @@ class Pelt:
         adult_sprite: str = None,
         senior_sprite: str = None,
         para_adult_sprite: str = None,
+        para_adolescent_sprite: str = None,
+        para_kitten_sprite: str = None,
         reverse: bool = False,
         sps_index: int = 1,
     ) -> None:
@@ -77,7 +79,7 @@ class Pelt:
         if not getattr(Pelt, "fur_length", None):
             self._init_data()
 
-        fur_length = self.length if self.length != "medium" else "short"
+        fur_length = "short"
 
         # converting old pose numbers into names
         if any(
@@ -89,6 +91,8 @@ class Pelt:
                 adult_sprite,
                 senior_sprite,
                 para_adult_sprite,
+                para_adolescent_sprite,
+                para_kitten_sprite,
             ]
         ):
             # DO NOT CHANGE THIS: this is meant to convert old saves and should not be updated with new pose additions
@@ -198,8 +202,11 @@ class Pelt:
                 "para_adult": self._conversion_compare_poses(
                     para_adult_sprite, "para_adult", fur_length
                 ),
-                "para_young": self._conversion_compare_poses(
-                    None, "para_young", fur_length
+                "para_adolescent": self._conversion_compare_poses(
+                    None, "para_adolescent", fur_length
+                ),
+                "para_kitten": self._conversion_compare_poses(
+                    None, "para_adolescent", fur_length
                 ),
             }
 
@@ -966,9 +973,12 @@ class Pelt:
             "para_adult": random.choice(
                 self._conversion_fetch_poses("para_adult", fur_length)[0]
             ),
-            "para_young": random.choice(
-                self._conversion_fetch_poses("para_young", fur_length)[0]
+            "para_adolescent": random.choice(
+                self._conversion_fetch_poses("para_adolescent", fur_length)[0]
             ),
+            "para_kitten": random.choice(
+                self._conversion_fetch_poses("para_kitten", fur_length)[0]
+            )
         }
         self.cat_sprites["young adult"] = self.cat_sprites["adult"]
         self.cat_sprites["senior adult"] = self.cat_sprites["adult"]
