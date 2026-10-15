@@ -11,7 +11,7 @@
         "shader_lighting",
         "shader_mask"
     ],
-    "sheet_layout": [3, 9],
+    "sheet_layout": [4, 7],
     "poses": [
         "newborn0",
         "newborn1",
