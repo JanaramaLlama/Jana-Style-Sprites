@@ -78,8 +78,10 @@ def generate_sprite(
 
     # paralyzed sprites
     elif cat.pelt.paralyzed and age != CatAge.NEWBORN:
-        if age in (CatAge.KITTEN, CatAge.ADOLESCENT):
-            cat_sprite = sprite_poses["para_young0"]
+        if age == CatAge.KITTEN:
+            cat_sprite = sprite_poses["para_kitten0"]
+        elif age == CatAge.ADOLESCENT:
+            cat_sprite = sprite_poses["para_adolescent0"]
         else:
             cat_sprite = sprite_poses[cat.pelt.cat_sprites["para_adult"]]
 

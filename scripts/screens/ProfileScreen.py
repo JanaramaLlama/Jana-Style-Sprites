@@ -763,11 +763,6 @@ class ProfileScreen(Screens):
         # NEWLINE ----------
         output += "\n"
 
-        # SPECIES
-        output += str(the_cat.species)
-        # NEWLINE ----------
-        output += "\n"
-
         # AGE
         if the_cat.age == CatAge.KITTEN:
             age = i18n.t("general.kitten_profile")
@@ -803,11 +798,8 @@ class ProfileScreen(Screens):
         # NEWLINE ----------
         output += "\n"
 
-        # PELT LENGTH
-        output += i18n.t(
-            "screens.profile.fur_label",
-            length=i18n.t(f"cat.pelts.fur_{the_cat.pelt.length}"),
-        )
+        # SPECIES
+        output += str(the_cat.species)
         # NEWLINE ----------
 
         # ACCESSORY
