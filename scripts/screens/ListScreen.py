@@ -241,7 +241,7 @@ class ListScreen(Screens):
     def screen_switches(self):
         super().screen_switches()
         self.show_mute_buttons()
-        self.clan_name = i18n.t("general.clan", name=game.clan.name)
+        self.clan_name = game.clan.name
 
         self.set_disabled_menu_buttons(["cats"])
         self.show_menu_buttons()
@@ -725,7 +725,9 @@ class ListScreen(Screens):
 
         first = i18n.t(f"screens.leader_den.{first_temper}")
         second = i18n.t(f"screens.leader_den.{second_temper}")
-        temper = f"{first} & {second}"
+        temper = i18n.t(
+            "screens.leader_den.clan_temper", first_temper=first, second_temper=second
+        )
 
         return i18n.t("screens.list.temper", group=group, temper=temper)
 

@@ -14,6 +14,77 @@ from scripts.events_module.text_adjust import adjust_list_text
 class Pelt:
     """Holds all appearance information for a cat."""
 
+    # SHARED DATA
+
+    # SCARS
+    # bite scars by @wood pank on discord
+    general_scars = []
+    missing_part_scars = []
+    for sprite_list in sprites.SCAR_DATA["sprite_list"]:
+        if sprite_list == sprites.SCAR_DATA["sprite_list"][-1]:
+            missing_part_scars.extend(sprite_list)
+        else:
+            general_scars.extend(sprite_list)
+
+    all_scars = [general_scars + missing_part_scars]
+
+    # ACCESSORIES
+    # make sure to add plural and singular forms of new accs to accessories.en.json so that they will display nicely
+
+    # all acc sprites are labeled as occupying a specific part of the cat sprite and then appended into these three lists
+    # collar_accessories are presumed to all occupy the neck area and are treated as the fourth of these lists
+    tail_accessories = []
+    body_accessories = []
+    head_accessories = []
+    paw_accessories = []
+
+    # here we create the master lists of each accessory type
+    plant_accessories = []
+    for sprite_list in sprites.PLANT_DATA["sprite_list"]:
+        plant_accessories.extend(sprite_list)
+        for sprite in sprite_list:
+            if sprite_list[sprite] == "tail":
+                tail_accessories.append(sprite)
+            elif sprite_list[sprite] == "body":
+                body_accessories.append(sprite)
+            elif sprite_list[sprite] == "head":
+                head_accessories.append(sprite)
+            elif sprite_list[sprite] == "paw":
+                paw_accessories.append(sprite)
+
+    wild_accessories = []
+    for sprite_list in sprites.WILD_DATA["sprite_list"]:
+        wild_accessories.extend(sprite_list)
+        for sprite in sprite_list:
+            if sprite_list[sprite] == "tail":
+                tail_accessories.append(sprite)
+            elif sprite_list[sprite] == "body":
+                body_accessories.append(sprite)
+            elif sprite_list[sprite] == "head":
+                head_accessories.append(sprite)
+            elif sprite_list[sprite] == "paw":
+                paw_accessories.append(sprite)
+
+    collar_accessories = []
+    collar_styles = []
+    if sprites.COLLAR_DATA["palette_map"]:
+        for style_type in sprites.COLLAR_DATA["style_data"]:
+            for style, color_list in style_type.items():
+                collar_styles.append(style)
+                for colour in color_list:
+                    collar_accessories.append(f"{style}_{colour}")
+    else:
+        for sprite_list in sprites.COLLAR_DATA["sprite_list"]:
+            collar_accessories.extend(sprite_list)
+
+    # this is used for acc-giving events, only change if you're adding a new category tag to the event filter
+    # adding a category here will automatically update the event editor's options
+    acc_categories = {
+        "PLANT": plant_accessories,
+        "WILD": wild_accessories,
+        "COLLAR": collar_accessories,
+    }
+
     def __init__(
         self,
         name: str = "SingleColour",
@@ -32,9 +103,9 @@ class Pelt:
         paralyzed: bool = False,
         opacity: int = 100,
         scars: list = None,
-        tint: str = "none",
+        tint: str | None = None,
         skin: str = "BLACK",
-        white_patches_tint: str = "none",
+        white_patches_tint: str | None = None,
         newborn_sprite: str = None,
         kitten_sprite: str = None,
         adol_sprite: str = None,
@@ -246,7 +317,7 @@ class Pelt:
     def _init_data(self):
         for f in constants.SPRITE_FOLDERS:
             POSE_DATA = getattr(sprites, f"POSE_DATA_{f}")
-            PELT_DATA = getattr(sprites, f"PELT_DATA_{f}")
+            PELT_DATA = getattr(sprites, f"GENERATION_GROUP_DATA_{f}")
 
             # POSES
             setattr(Pelt, f"all_poses_{f}", POSE_DATA["poses"])
@@ -272,7 +343,7 @@ class Pelt:
             # COLOUR CATEGORIES
             setattr(
                 Pelt,
-                f"colours_categories_{f}",
+                f"colour_categories_{f}",
                 [
                     getattr(Pelt, f"ginger_colours_{f}"),
                     getattr(Pelt, f"black_colours_{f}"),
@@ -281,63 +352,70 @@ class Pelt:
                 ],
             )
 
-            for sprite_list in PELT_DATA["sprite_list"]:
-                getattr(Pelt, f"all_pelt_colours_{f}").extend(sprite_list.keys())
-                for colour in sprite_list:
-                    if sprite_list[colour] == "white":
-                        getattr(Pelt, f"white_colours_{f}").append(colour)
-                    elif sprite_list[colour] == "black":
-                        getattr(Pelt, f"black_colours_{f}").append(colour)
-                    elif sprite_list[colour] == "ginger":
-                        getattr(Pelt, f"ginger_colours_{f}").append(colour)
-                    elif sprite_list[colour] == "brown":
-                        getattr(Pelt, f"brown_colours_{f}").append(colour)
+            for color in PELT_DATA["pelts"]["colors"]:
+                getattr(Pelt, f"all_pelt_colours_{f}").extend(color)
+                if PELT_DATA["pelts"]["colors"][color] == "white":
+                    getattr(Pelt, f"white_colours_{f}").append(color)
+                elif PELT_DATA["pelts"]["colors"][color] == "black":
+                    getattr(Pelt, f"black_colours_{f}").append(color)
+                elif PELT_DATA["pelts"]["colors"][color] == "ginger":
+                    getattr(Pelt, f"ginger_colours_{f}").append(color)
+                elif PELT_DATA["pelts"]["colors"][color] == "brown":
+                    getattr(Pelt, f"brown_colours_{f}").append(color)
 
             # PELT PATTERNS
-            setattr(Pelt, f"pelt_patterns_{f}", PELT_DATA["pattern_names"])
+            setattr(Pelt, f"pelt_patterns_{f}", [])
+            setattr(Pelt, f"tabbies_{f}", [])
+            setattr(Pelt, f"spotted_{f}", [])
+            setattr(Pelt, f"plain_{f}", [])
+            setattr(Pelt, f"exotic_{f}", [])
+            setattr(Pelt, f"torties_{f}", [])
 
             # PATTERN CATEGORIES
-            setattr(Pelt, f"pelt_categories_{f}", PELT_DATA["pattern_categories"])
+            setattr(
+                Pelt,
+                f"pelt_categories_{f}",
+                [
+                    getattr(Pelt, f"tabbies_{f}"),
+                    getattr(Pelt, f"spotted_{f}"),
+                    getattr(Pelt, f"plain_{f}"),
+                    getattr(Pelt, f"exotic_{f}"),
+                    getattr(Pelt, f"torties_{f}"),
+                ],
+            )
 
-            setattr(
-                Pelt,
-                f"tabbies_{f}",
-                list(getattr(Pelt, f"pelt_categories_{f}")["tabbies"]),
-            )
-            setattr(
-                Pelt,
-                f"spotted_{f}",
-                list(getattr(Pelt, f"pelt_categories_{f}")["spotted"]),
-            )
-            setattr(
-                Pelt, f"plain_{f}", list(getattr(Pelt, f"pelt_categories_{f}")["plain"])
-            )
-            setattr(
-                Pelt,
-                f"exotic_{f}",
-                list(getattr(Pelt, f"pelt_categories_{f}")["exotic"]),
-            )
-            setattr(
-                Pelt,
-                f"torties_{f}",
-                list(getattr(Pelt, f"pelt_categories_{f}")["torties"]),
-            )
+            for pelt in PELT_DATA["pelts"]["pattern_types"]:
+                getattr(Pelt, f"pelt_patterns_{f}").extend(pelt)
+                if PELT_DATA["pelts"]["pattern_types"][pelt] == "tabbies":
+                    getattr(Pelt, f"tabbies_{f}").append(pelt)
+                elif PELT_DATA["pelts"]["pattern_types"][pelt] == "spotted":
+                    getattr(Pelt, f"spotted_{f}").append(pelt)
+                elif PELT_DATA["pelts"]["pattern_types"][pelt] == "plain":
+                    getattr(Pelt, f"plain_{f}").append(pelt)
+                elif PELT_DATA["pelts"]["pattern_types"][pelt] == "exotic":
+                    getattr(Pelt, f"exotic_{f}").append(pelt)
+                elif PELT_DATA["pelts"]["pattern_types"][pelt] == "torties":
+                    getattr(Pelt, f"torties_{f}").append(pelt)
 
             # PELT SPRITE NAMES
             # pelt name used in save files: pelt's spritesheet
-            setattr(Pelt, f"pattern_sprite_names_{f}", {})
-            for sheet, names in PELT_DATA["spritesheet"].items():
-                for name in names:
-                    getattr(Pelt, f"pattern_sprite_names_{f}").update({name: sheet})
-            getattr(Pelt, f"pattern_sprite_names_{f}").update(
-                {
-                    "Tortie": None,
-                    "Calico": None,
-                }
-            )
+            # setattr(Pelt, f"pattern_sprite_names_{f}", {})
+            # for sheet, names in PELT_DATA["spritesheet"].items():
+            #     for name in names:
+            #         getattr(Pelt, f"pattern_sprite_names_{f}").update({name: sheet})
+            # getattr(Pelt, f"pattern_sprite_names_{f}").update(
+            #     {
+            #         "Tortie": None,
+            #         "Calico": None,
+            #     }
+            # )
 
             # TORTIE PATCHES
-            setattr(Pelt, f"tortie_patches_{f}", [])
+            setattr(
+                Pelt,
+                f"tortie_patches_{f}",
+                list(getattr(sprites, f"TORTIE_PATCH_COMBOS_{f}").keys()),
+            )
             for sprite_list in getattr(sprites, f"TORTIE_DATA_{f}")["sprite_list"]:
                 getattr(Pelt, f"tortie_patches_{f}").extend(sprite_list)
 
@@ -350,7 +428,15 @@ class Pelt:
                     ]:
                         getattr(Pelt, f"{i}_markings_{f}").extend(sprite_list)
                 else:
-                    setattr(Pelt, f"{i}_white_{f}", [])
+                    setattr(
+                        Pelt,
+                        f"{i}_white_{f}",
+                        list(
+                            getattr(sprites, f"WHITE_PATCH_COMBOS_{f}")
+                            .get(i, {})
+                            .keys()
+                        ),
+                    )
                     for sprite_list in getattr(sprites, f"WHITE_{i.upper()}_DATA_{f}")[
                         "sprite_list"
                     ]:
@@ -383,74 +469,6 @@ class Pelt:
 
         # PELT LENGTH
         setattr(Pelt, "pelt_length", ["short", "medium", "long"])
-
-        # SCARS
-        # bite scars by @wood pank on discord
-        setattr(Pelt, "general_scars", [])
-        for sprite_list in sprites.SCAR_DATA["sprite_list"]:
-            getattr(Pelt, "general_scars").extend(sprite_list)
-
-        setattr(Pelt, "missing_part_scars", [])
-        for sprite_list in sprites.SCAR_MISSING_PART_DATA["sprite_list"]:
-            getattr(Pelt, "missing_part_scars").extend(sprite_list)
-
-        setattr(Pelt, "all_scars", [getattr(Pelt, "general_scars") + getattr(Pelt, "missing_part_scars")])
-
-        # ACCESSORIES
-        # make sure to add plural and singular forms of new accs to accessories.en.json so that they will display nicely
-
-        # all acc sprites are labeled as occupying a specific part of the cat sprite and then appended into these three lists
-        # collar_accessories are presumed to all occupy the neck area and are treated as the fourth of these lists
-        setattr(Pelt, "tail_accessories", [])
-        setattr(Pelt, "body_accessories", [])
-        setattr(Pelt, "head_accessories", [])
-
-        # here we create the master lists of each accessory type
-        setattr(Pelt, "plant_accessories", [])
-        for sprite_list in sprites.PLANT_DATA["sprite_list"]:
-            getattr(Pelt, "plant_accessories").extend(sprite_list)
-            for sprite in sprite_list:
-                if sprite_list[sprite] == "tail":
-                    getattr(Pelt, "tail_accessories").append(sprite)
-                elif sprite_list[sprite] == "body":
-                    getattr(Pelt, "body_accessories").append(sprite)
-                elif sprite_list[sprite] == "head":
-                    getattr(Pelt, "body_accessories").append(sprite)
-
-        setattr(Pelt, "wild_accessories", [])
-        for sprite_list in sprites.WILD_DATA["sprite_list"]:
-            getattr(Pelt, "wild_accessories").extend(sprite_list)
-            for sprite in sprite_list:
-                if sprite_list[sprite] == "tail":
-                    getattr(Pelt, "tail_accessories").append(sprite)
-                elif sprite_list[sprite] == "body":
-                    getattr(Pelt, "body_accessories").append(sprite)
-                elif sprite_list[sprite] == "head":
-                    getattr(Pelt, "body_accessories").append(sprite)
-
-        setattr(Pelt, "collar_accessories", [])
-        setattr(Pelt, "collar_styles", [])
-        if sprites.COLLAR_DATA["palette_map"]:
-            for style_type in sprites.COLLAR_DATA["style_data"]:
-                for style, color_list in style_type.items():
-                    getattr(Pelt, "collar_styles").append(style)
-                    for colour in color_list:
-                        getattr(Pelt, "collar_accessories").append(f"{style}_{colour}")
-        else:
-            for sprite_list in sprites.COLLAR_DATA["sprite_list"]:
-                getattr(Pelt, "collar_accessories").extend(sprite_list)
-
-        # this is used for acc-giving events, only change if you're adding a new category tag to the event filter
-        # adding a category here will automatically update the event editor's options
-        setattr(
-            Pelt,
-            "acc_categories",
-            {
-                "PLANT": getattr(Pelt, "plant_accessories"),
-                "WILD": getattr(Pelt, "wild_accessories"),
-                "COLLAR": getattr(Pelt, "collar_accessories"),
-            },
-        )
 
     @property
     def accessory(self):
@@ -739,11 +757,8 @@ class Pelt:
             weights = [1, 1, 1, 1]
 
         # Now, choose the pelt category and pelt
-        possible_pelts = [
-            getattr(Pelt, f"pelt_categories_{self.index}")[x]
-            for x in getattr(Pelt, f"pelt_categories_{self.index}")
-            if x != "torties"
-        ]
+        possible_pelts = getattr(Pelt, f"pelt_categories_{self.index}").copy()
+        possible_pelts.pop(-1)  # remove torties
         chosen_pelt = random.choice(
             random.choices(possible_pelts, weights=weights, k=1)[0]
         )
@@ -769,9 +784,9 @@ class Pelt:
         if torbie:
             # If it is tortie, the chosen pelt above becomes the base pelt.
             chosen_tortie_base = chosen_pelt
-            if chosen_tortie_base in ("TwoColour", "SingleColour"):
-                chosen_tortie_base = "Single"
-            chosen_tortie_base = chosen_tortie_base.lower()
+            # if chosen_tortie_base in ("TwoColour", "SingleColour"):
+            #    chosen_tortie_base = "Single"
+            chosen_tortie_base = chosen_tortie_base
             chosen_pelt = random.choice(getattr(Pelt, f"torties_{self.index}"))
 
         # ------------------------------------------------------------------------------------------------------------#
@@ -802,7 +817,7 @@ class Pelt:
 
         chosen_pelt_color = random.choice(
             random.choices(
-                getattr(Pelt, f"colours_categories_{self.index}"), weights=weights, k=1
+                getattr(Pelt, f"colour_categories_{self.index}"), weights=weights, k=1
             )[0]
         )
 
@@ -830,7 +845,9 @@ class Pelt:
         if all([x == 0 for x in weights]):
             weights = [1, 1, 1]
 
-        chosen_pelt_length = random.choices(getattr(Pelt, "pelt_length"), weights=weights, k=1)[0]
+        chosen_pelt_length = random.choices(
+            getattr(Pelt, "pelt_length"), weights=weights, k=1
+        )[0]
 
         # ------------------------------------------------------------------------------------------------------------#
         #   PELT WHITE
@@ -870,10 +887,9 @@ class Pelt:
         # ------------------------------------------------------------------------------------------------------------#
         #   PELT
         # ------------------------------------------------------------------------------------------------------------#
-        pelt_categories = getattr(Pelt, f"pelt_categories_{self.index}")
-
         # Determine pelt.
-        possible_pelts = [pelt_categories[x] for x in pelt_categories if x != "torties"]
+        possible_pelts = getattr(Pelt, f"pelt_categories_{self.index}").copy()
+        possible_pelts.pop(-1)  # remove torties
         chosen_pelt = random.choice(
             random.choices(possible_pelts, weights=(35, 20, 30, 15), k=1)[0]
         )
@@ -891,9 +907,9 @@ class Pelt:
         if torbie:
             # If it is tortie, the chosen pelt above becomes the base pelt.
             chosen_tortie_base = chosen_pelt
-            if chosen_tortie_base in ("TwoColour", "SingleColour"):
-                chosen_tortie_base = "Single"
-            chosen_tortie_base = chosen_tortie_base.lower()
+            # if chosen_tortie_base in ("TwoColour", "SingleColour"):
+            #    chosen_tortie_base = "Single"
+            chosen_tortie_base = chosen_tortie_base
             chosen_pelt = random.choice(getattr(Pelt, f"torties_{self.index}"))
 
         # ------------------------------------------------------------------------------------------------------------#
@@ -901,7 +917,7 @@ class Pelt:
         # ------------------------------------------------------------------------------------------------------------#
 
         chosen_pelt_color = random.choice(
-            random.choices(getattr(Pelt, f"colours_categories_{self.index}"), k=1)[0]
+            random.choices(getattr(Pelt, f"colour_categories_{self.index}"), k=1)[0]
         )
 
         # ------------------------------------------------------------------------------------------------------------#
@@ -1014,7 +1030,12 @@ class Pelt:
 
         if acc_display_choice == 1:
             self.accessory = tuple(
-                (random.choice(getattr(Pelt, "plant_accessories") + getattr(Pelt, "wild_accessories")))
+                (
+                    random.choice(
+                        getattr(Pelt, "plant_accessories")
+                        + getattr(Pelt, "wild_accessories")
+                    )
+                )
             )
         else:
             self.accessory = tuple()
@@ -1039,9 +1060,12 @@ class Pelt:
                     # people are fans of the print message, so I'm putting it back
                     print("Wildcard tortie!")
 
-                    # Allow any pattern:
+                    # Allow any pattern, minus torties:
                     self.tortie_pattern = random.choice(
-                        getattr(Pelt, f"pelt_patterns_{self.index}")
+                        getattr(Pelt, f"tabbies_{self.index}")
+                        + getattr(Pelt, f"spotted_{self.index}")
+                        + getattr(Pelt, f"plain_{self.index}")
+                        + getattr(Pelt, f"exotic_{self.index}")
                     )
 
                     # Allow any colors that aren't the base color.
@@ -1053,21 +1077,21 @@ class Pelt:
 
                 else:
                     # Normal generation
-                    if self.tortie_base in ("singlestripe", "smoke", "single"):
+                    if self.tortie_base in ("SingleStripe", "Smoke"):
                         self.tortie_pattern = random.choice(
                             [
-                                "tabby",
-                                "mackerel",
-                                "classic",
-                                "single",
-                                "smoke",
-                                "agouti",
-                                "ticked",
+                                "Tabby",
+                                "Mackerel",
+                                "Classic",
+                                "SingleColour",
+                                "Smoke",
+                                "Agouti",
+                                "Ticked",
                             ]
                         )
                     else:
                         self.tortie_pattern = random.choices(
-                            [self.tortie_base, "single"], weights=[97, 3], k=1
+                            [self.tortie_base, "SingleColour"], weights=[97, 3], k=1
                         )[0]
 
                     white_colours = getattr(Pelt, f"white_colours_{self.index}")
@@ -1178,7 +1202,7 @@ class Pelt:
             chance = 40
         # Chance of point is 1 / chance.
         if self.name != "Tortie" and not int(random.random() * chance):
-            self.points = random.choice(getattr(Pelt, f"point_markings_{self.index}"))
+            self.points = random.choice(getattr(Pelt, f"points_markings_{self.index}"))
         else:
             self.points = None
 
@@ -1423,8 +1447,10 @@ class Pelt:
 
         return "".join(groups)
 
+    """
     def get_sprites_name(self):
         return getattr(Pelt, f"pattern_sprite_names_{self.index}")[self.name]
+    """
 
 
 def _describe_pattern(cat, short=False):

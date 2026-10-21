@@ -1,6 +1,6 @@
 The history files of a cat log important events such as their apprenticeship influence, death message, murder, and more. While parts of this file is back-end, most of it is text shown in the history tab of a cat.
 
-Big thanks to Sel's Emberclan for their extensive examples of the history files.
+Big thanks to Vicki's Emberclan for their extensive examples of the history files.
 
 ## Beginning
 
@@ -283,13 +283,13 @@ Based on the cat's afterlife affinity's in clan_cats.json and if they're a kitte
 
 Essentially, this part of the file holds the potential generated text a cat might get due to a condition gained from an event/patrol. If there is not a possible history, it'll be blank. `"possible_history": {},`
 
-Every event and patrol has the opportunity to make custom death and scar texts based on where the condition originated from. In the example below, "broken bone" originated from falling off a cliff. 
+Every event and patrol has the opportunity to make custom death and scar texts based on where the condition originated from. In the example below, "broken_bone" originated from falling off a cliff. 
 
 When this condition duration is over, and if it rolls into death or a scar, then the game will pull from these texts instead of the default.
 
 ```json
     "possible_history": {
-        "broken bone": {
+        "broken_bone": {
             "death_text": "m_c died from {PRONOUN\/m_c\/poss} 
             wounds after falling off a cliff.",
             "scar_text": "m_c was scarred when 
@@ -299,7 +299,7 @@ When this condition duration is over, and if it rolls into death or a scar, then
     },
 ```
 
-`"broken bone": {}`: The connected condition to the possible text.
+`"broken_bone": {}`: The connected condition to the possible text.
 
 `"death_text"`: The text that will be given if this cat dies due to the condition. It would be transferred to "died_by".
 

@@ -1,7 +1,7 @@
 {
     "en": {
         "gather_fourtrees": "Fourtrees",
-        "gather_island": "Gathering Island",
+        "gather_island": "the Gathering Island",
         "gather_monster": "the Monster Carcass",
         "moon_mothermouth": "the Mothermouth",
         "moon_meteor": "the Silverpelt Stone",
@@ -19,9 +19,11 @@
         "terrain_hugeboulder": "the huge boulder",
         "terrain_waterfall": "the waterfall",
         "terrain_gullcliffs": "the gull cliffs",
-        "terrain_eaglenest": "the eagle nest",
+        "terrain_eaglenest": "the eyrie",
         "terrain_rookery": "the rookery",
         "terrain_batcaves": "the bat caves",
-        "terrain_carrionbeach": "the carrionbeach"
+        "terrain_carrionbeach": "the carrionbeach",
+        "terrain_abandonednest": "the abandoned Twoleg nest",
+        "terrain_thunderpath": "the Thunderpath"
     }
 }

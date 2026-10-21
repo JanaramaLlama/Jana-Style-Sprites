@@ -1,6 +1,6 @@
 [
     {
-        "id": "general_formerclancat_dead_thoughts",
+        "event_id": "general_formerclancat_dead_thoughts_ur",
         "strings": [
             "Wanders around {PRONOUN/m_c/poss} old territory",
             "Explores places {PRONOUN/m_c/subject} {VERB/m_c/were/was} afraid to go in life",
@@ -12,15 +12,7 @@
         "involved_cats": {
             "m_c": {
                 "past_status": [
-                    "leader",
-                    "deputy",
-                    "warrior",
-                    "medicine cat",
-                    "medicine cat apprentice",
-                    "apprentice",
-                    "mediator",
-                    "mediator apprentice",
-                    "kitten"
+                    "clancat"
                 ]
             }
         }

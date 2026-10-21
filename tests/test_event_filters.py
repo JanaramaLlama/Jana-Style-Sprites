@@ -1,8 +1,12 @@
 import unittest
-import os
 from copy import deepcopy
 from itertools import permutations
 
+from scripts.cat.conditions.gain_conditions import (
+    gain_temporary_condition,
+    gain_permanent_condition,
+)
+from scripts.cat.microservices.add_to_clan import add_to_clan, add_dependents_to_clan
 from scripts.cat.personality import Personality
 from scripts.cat.skills import Skill, SkillPath
 from scripts.clan_resources.point_of_interest import (
@@ -11,6 +15,7 @@ from scripts.clan_resources.point_of_interest import (
     get_poi_tags_set,
     clear_pois,
     generate_and_add_new_poi,
+    get_pois_by_category,
 )
 
 try:
@@ -18,13 +23,11 @@ try:
 except ImportError:
     import tomli as tomllib
 
-os.environ["SDL_VIDEODRIVER"] = "dummy"
-os.environ["SDL_AUDIODRIVER"] = "dummy"
-
-from scripts.cat.cats import Cat, create_cat
+from scripts.cat.cats import Cat
+from scripts.cat.factories.test_cat_factory import TestCatFactory
 from scripts.cat_relations.inheritance2 import inheritance_db
 from scripts.cat.enums import CatRank, CatAge, CatSocial, CatGroup, CatStanding
-from scripts.cat.status import StatusDict
+from scripts.cat.factories.typed_dicts import StatusDict
 from scripts.cat_relations.enums import RelType, rel_type_tiers, RelTier
 from scripts.cat_relations.relationship import Relationship
 from scripts.clan import Clan
@@ -34,20 +37,23 @@ from scripts.events_module.event_filters import (
     event_for_tags,
     event_for_cat,
     event_for_poi,
+    check_rel_constraint_groups,
 )
 from scripts.game_structure import game
+
+cat_factory = TestCatFactory()
 
 
 class TestEventFilters(unittest.TestCase):
     def setUp(self):
-        game.clan = Clan()
+        game.clan = Clan("test")
         game.clan.biome = "Forest"
         game.clan.override_biome = False
         game.clan.camp_bg = "camp1"
         game.clan.starting_season = "Newleaf"
         game.clan.game_mode = "classic"
 
-        self.test_cat = create_cat(CatRank.LEADER, moons=50)
+        self.test_cat = cat_factory.create_cat(rank=CatRank.LEADER, moons=50)
         game.clan.leader = self.test_cat
 
     def test_location(self):
@@ -198,14 +204,17 @@ class TestEventFilters(unittest.TestCase):
 
 class TestPointsOfInterest(unittest.TestCase):
     def setUp(self):
-        game.clan = Clan()
+        prior_clan = game.clan
+        self.addCleanup(setattr, game, "clan", prior_clan)
+
+        game.clan = Clan(save_id="test")
         game.clan.biome = "Forest"
         game.clan.override_biome = False
         game.clan.camp_bg = "camp1"
         game.clan.starting_season = "Newleaf"
         game.clan.game_mode = "classic"
 
-        self.test_cat = create_cat(CatRank.LEADER, moons=50)
+        self.test_cat = cat_factory.create_cat(rank=CatRank.LEADER, moons=50)
         game.clan.leader = self.test_cat
 
         clear_pois()
@@ -230,6 +239,10 @@ class TestPointsOfInterest(unittest.TestCase):
         self.assertIn("prey:fish", get_poi_tags_set())
         self.assertIn("prey", get_poi_tags_set())
         self.assertNotIn("fish", get_poi_tags_set())
+
+        self.assertIn("test_name", get_pois_by_category("gathering"))
+        self.assertNotIn("test_name", get_pois_by_category("moonplace"))
+        self.assertNotIn("test_name", get_pois_by_category("terrain"))
 
     def test_clear_pois(self):
         poi_to_add = {
@@ -353,9 +366,12 @@ class TestPointsOfInterest(unittest.TestCase):
             "match tag generic to generic": {"tags": ["water"]},
             "match tag exact to exact": {"tags": ["prey:fish"]},
             "match tag generic to exact": {"tags": ["prey"]},
-            "empty all": {"name": [], "tags": []},
+            "match category": {"category": "gathering"},
+            "empty all": {"name": [], "tags": [], "category": None},
             "empty name": {"name": [], "tags": ["water"]},
             "empty tags": {"name": ["test_name"], "tags": []},
+            "None category": {"name": ["test_name"], "category": None},
+            "category and tag": {"tags": ["prey"], "category": "gathering"},
         }
 
         for title, event_poi in combinations.items():
@@ -367,6 +383,15 @@ class TestPointsOfInterest(unittest.TestCase):
             "no name": {"name": ["something_else", "aint_it_chief"]},
             "no tag": {"tags": ["Twolegs", "cave"]},
             "match generic tag but not exact": {"tags": ["prey:bird"]},
+            "invalid category": {"category": "not found"},
+            "invalid category with valid tag": {
+                "tags": ["prey"],
+                "category": "not found",
+            },
+            "invalid tag with valid category": {
+                "tags": ["prey:bird"],
+                "category": "gathering",
+            },
         }
 
         for title, event_poi in bad_combinations.items():
@@ -376,16 +401,12 @@ class TestPointsOfInterest(unittest.TestCase):
 
 class TestInterpersonalRelationshipConstraints(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
-        Cat.disable_random = True
-
-    @classmethod
     def build_cat_constraint(cls, rel_filter):
         return {"relationship_status": [rel_filter]}
 
     def test_strangers(self):
-        cat1 = Cat()
-        cat2 = Cat()
+        cat1 = cat_factory.create_cat()
+        cat2 = cat_factory.create_cat()
 
         cat1.relationships = {}
         cat2.relationships = {}
@@ -439,9 +460,9 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_siblings(self):
-        parent = Cat()
-        cat1 = Cat(parent1=parent.ID)
-        cat2 = Cat(parent1=parent.ID)
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(parent1=parent.ID)
+        cat2 = cat_factory.create_cat(parent1=parent.ID)
         inheritance_db.load_inheritances(Cat)
 
         with self.subTest("are siblings, expected siblings"):
@@ -478,9 +499,9 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_littermates(self):
-        parent = Cat()
-        cat1 = Cat(parent1=parent.ID, moons=1)
-        cat2 = Cat(parent1=parent.ID, moons=1)
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(parent1=parent.ID, moons=1)
+        cat2 = cat_factory.create_cat(parent1=parent.ID, moons=1)
 
         inheritance_db.load_inheritances(Cat)
 
@@ -518,10 +539,10 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_mates(self):
-        mate1 = Cat()
-        mate2 = Cat()
+        mate1 = cat_factory.create_cat()
+        mate2 = cat_factory.create_cat()
 
-        other = Cat()
+        other = cat_factory.create_cat()
 
         mate1.mate.append(mate2.ID)
         mate2.mate.append(mate1.ID)
@@ -560,8 +581,8 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_parent_child(self):
-        parent = Cat()
-        cat1 = Cat(parent1=parent.ID)
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(parent1=parent.ID)
 
         inheritance_db.load_inheritances(Cat)
 
@@ -599,8 +620,8 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_child_parent(self):
-        parent = Cat()
-        cat1 = Cat(parent1=parent.ID)
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(parent1=parent.ID)
 
         inheritance_db.load_inheritances(Cat)
 
@@ -638,8 +659,12 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_app_mentor(self):
-        app = Cat(moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE))
-        mentor = Cat(moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR))
+        app = cat_factory.create_cat(
+            moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE)
+        )
+        mentor = cat_factory.create_cat(
+            moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR)
+        )
 
         app.update_mentor(new_mentor=mentor.ID)
 
@@ -677,9 +702,12 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_mentor_app(self):
-        app = Cat(moons=8, disable_random=True)
-        mentor = Cat(
-            moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR), disable_random=True
+        app = cat_factory.create_cat(
+            moons=8,
+        )
+        mentor = cat_factory.create_cat(
+            moons=26,
+            status_dict=StatusDict(rank=CatRank.WARRIOR),
         )
 
         app.update_mentor(new_mentor=mentor.ID)
@@ -718,9 +746,12 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
     def test_multiple(self):
-        app = Cat(moons=8, disable_random=True)
-        mentor = Cat(
-            moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR), disable_random=True
+        app = cat_factory.create_cat(
+            moons=8,
+        )
+        mentor = cat_factory.create_cat(
+            moons=26,
+            status_dict=StatusDict(rank=CatRank.WARRIOR),
         )
 
         app.update_mentor(new_mentor=mentor.ID)
@@ -736,6 +767,713 @@ class TestInterpersonalRelationshipConstraints(unittest.TestCase):
             )
 
 
+class TestInterpersonalRelationshipConstraints2(unittest.TestCase):
+    """
+    This one specifically tests with the updated RelationshipConstraintDict usage and function.
+    Since it can handle more specific configurations of cats it could use different test coverage.
+    """
+
+    def test_strangers(self):
+        cat1 = cat_factory.create_cat()
+        cat2 = cat_factory.create_cat()
+        cat3 = cat_factory.create_cat()
+
+        cat1.relationships[cat2.ID] = Relationship(
+            **{
+                "cat_from": cat1,
+                "cat_to": cat2,
+                "like": 20,
+                "romance": 10,
+                "respect": 67,
+            }
+        )
+        cat2.relationships = {}
+        cat3.relationships = {}
+        involved_cats = {
+            "c1": cat1,
+            "c2": cat2,
+            "c3": cat3,
+        }
+        inheritance_db.load_inheritances(Cat)
+
+        with self.subTest("are strangers, expected strangers"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1", "c2"],
+                        "cats_to": ["c3"],
+                        "mutual": False,
+                        "constraints": ["strangers"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+        with self.subTest("are strangers, expected not strangers"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1", "c2"],
+                        "cats_to": ["c3"],
+                        "mutual": False,
+                        "constraints": ["-strangers"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+        with self.subTest("are not strangers, expected strangers"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c3", "c2"],
+                        "mutual": False,
+                        "constraints": ["strangers"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+        with self.subTest("are not strangers, expected not strangers"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c3", "c2"],
+                        "mutual": False,
+                        "constraints": ["-strangers"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_siblings(self):
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(parent1=parent.ID)
+        cat2 = cat_factory.create_cat(parent1=parent.ID)
+        inheritance_db.load_inheritances(Cat)
+
+        involved_cats = {
+            "parent": parent,
+            "c1": cat1,
+            "c2": cat2,
+        }
+
+        with self.subTest("are siblings, expected siblings"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are siblings, expected not siblings"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["-siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not siblings, expected siblings"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not siblings, expected not siblings"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["-siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("some, but not all, are siblings. expected siblings."):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1", "parent"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("some, but not all, are siblings. expected not siblings."):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1", "parent"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["-siblings"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_littermates(self):
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(
+            parent1=parent.ID,
+            moons=1,
+        )
+        cat2 = cat_factory.create_cat(
+            parent1=parent.ID,
+            moons=1,
+        )
+        sib = cat_factory.create_cat(
+            parent1=parent.ID,
+            moons=10,
+        )
+
+        inheritance_db.load_inheritances(Cat)
+
+        involved_cats = {"parent": parent, "c1": cat1, "c2": cat2, "sib": sib}
+
+        with self.subTest("are littermates, expected littermates"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are littermates, expected not littermates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["c2"],
+                        "mutual": False,
+                        "constraints": ["-littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not littermates, expected littermates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["sib"],
+                        "mutual": False,
+                        "constraints": ["littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not littermates, expected not littermates"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["sib"],
+                        "mutual": False,
+                        "constraints": ["-littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("some, but not all, are littermates, expected littermates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["sib", "c2"],
+                        "mutual": False,
+                        "constraints": ["littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest(
+            "some, but not all, are littermates, expected not littermates"
+        ):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["sib", "c2"],
+                        "mutual": False,
+                        "constraints": ["-littermates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_mates(self):
+        mate1 = cat_factory.create_cat()
+        mate2 = cat_factory.create_cat()
+        other = cat_factory.create_cat()
+
+        involved_cats = {"mate1": mate1, "mate2": mate2, "other": other}
+
+        mate1.mate.append(mate2.ID)
+        mate2.mate.append(mate1.ID)
+
+        with self.subTest("are mates, expected mates"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2"],
+                        "mutual": False,
+                        "constraints": ["mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are mates, expected not mates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2"],
+                        "mutual": False,
+                        "constraints": ["-mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not mates, expected mates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["other"],
+                        "mutual": False,
+                        "constraints": ["mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not mates, expected not mates"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["other"],
+                        "mutual": False,
+                        "constraints": ["-mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not all mates, expected mates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2", "other"],
+                        "mutual": False,
+                        "constraints": ["mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not all mates, expected not mates"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2", "other"],
+                        "mutual": False,
+                        "constraints": ["-mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+        mate1.mate.append(other.ID)
+        with self.subTest(
+            "all cat_to are mated to cat_from, expected non-mutual mates"
+        ):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2", "other"],
+                        "mutual": False,
+                        "constraints": ["mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("all cat_to are mated to cat_from, expected mutual mates"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mate1"],
+                        "cats_to": ["mate2", "other"],
+                        "mutual": True,
+                        "constraints": ["mates"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_parent_child(self):
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(
+            parent1=parent.ID,
+        )
+        cat2 = cat_factory.create_cat()
+
+        inheritance_db.load_inheritances(Cat)
+        involved_cats = {"parent": parent, "c1": cat1, "c2": cat2}
+
+        with self.subTest("are parent/child, expected parent/child"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["parent"],
+                        "cats_to": ["c1"],
+                        "mutual": False,
+                        "constraints": ["parent/child"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are parent/child, expected not parent/child"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["parent"],
+                        "cats_to": ["c1"],
+                        "mutual": False,
+                        "constraints": ["-parent/child"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not parent/child, expected parent/child"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["parent", "c2"],
+                        "cats_to": ["c1"],
+                        "mutual": False,
+                        "constraints": ["parent/child"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not parent/child, expected not parent/child"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c2"],
+                        "cats_to": ["c1"],
+                        "mutual": False,
+                        "constraints": ["-parent/child"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_child_parent(self):
+        parent = cat_factory.create_cat()
+        cat1 = cat_factory.create_cat(
+            parent1=parent.ID,
+        )
+        cat2 = cat_factory.create_cat()
+
+        inheritance_db.load_inheritances(Cat)
+        involved_cats = {"parent": parent, "c1": cat1, "c2": cat2}
+
+        with self.subTest("are child/parent, expected child/parent"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["child/parent"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are child/parent, expected not child/parent"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["-child/parent"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not child/parent, expected child/parent"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c1", "c2"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["child/parent"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not child/parent, expected not child/parent"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["c2"],
+                        "cats_to": ["parent"],
+                        "mutual": False,
+                        "constraints": ["-child/parent"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_app_mentor(self):
+        app = cat_factory.create_cat(
+            moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE)
+        )
+        mentor = cat_factory.create_cat(
+            moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR)
+        )
+
+        app2 = cat_factory.create_cat(
+            moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE)
+        )
+
+        app.update_mentor(new_mentor=mentor.ID)
+
+        involved_cats = {"app": app, "mentor": mentor, "app2": app2}
+
+        with self.subTest("are app/mentor, expected app/mentor"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+        with self.subTest("are app/mentor, expected not app/mentor"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["-app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not app/mentor, expected app/mentor"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app"],
+                        "mutual": False,
+                        "constraints": ["app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not app/mentor, expected not app/mentor"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app"],
+                        "mutual": False,
+                        "constraints": ["-app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not all app/mentor, expected app/mentor"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app", "app2"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("some but not all app/mentor, expected not app/mentor"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app", "app2"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["-app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("trying to find app with 2 mentors, and expects app/mentor"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app"],
+                        "cats_to": ["mentor", "app2"],
+                        "mutual": False,
+                        "constraints": ["app/mentor"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_mentor_app(self):
+        app = cat_factory.create_cat(
+            moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE)
+        )
+        mentor = cat_factory.create_cat(
+            moons=26, status_dict=StatusDict(rank=CatRank.WARRIOR)
+        )
+
+        app2 = cat_factory.create_cat(
+            moons=8, status_dict=StatusDict(rank=CatRank.APPRENTICE)
+        )
+
+        app.update_mentor(new_mentor=mentor.ID)
+
+        involved_cats = {"app": app, "mentor": mentor, "app2": app2}
+
+        with self.subTest("are mentor/app, expected mentor/app"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app"],
+                        "mutual": False,
+                        "constraints": ["mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are mentor/app, expected not mentor/app"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app"],
+                        "mutual": False,
+                        "constraints": ["-mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not mentor/app, expected mentor/app"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not mentor/app, expected not mentor/app"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["app"],
+                        "cats_to": ["mentor"],
+                        "mutual": False,
+                        "constraints": ["-mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not all mentor/app, expected mentor/app"):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app", "app2"],
+                        "mutual": False,
+                        "constraints": ["mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+        with self.subTest("are not all mentor/app, expected not any mentor/app"):
+            self.assertTrue(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app", "app2"],
+                        "mutual": False,
+                        "constraints": ["-mentor/app"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+    def test_multiple(self):
+        app = cat_factory.create_cat(
+            moons=8,
+        )
+        mentor = cat_factory.create_cat(
+            moons=26,
+            status_dict=StatusDict(rank=CatRank.WARRIOR),
+        )
+        involved_cats = {"mentor": mentor, "app": app}
+
+        app.update_mentor(new_mentor=mentor.ID)
+        with self.subTest(
+            "are mentor/app, expected not mentor/app and not parent/child"
+        ):
+            self.assertFalse(
+                check_rel_constraint_groups(
+                    {
+                        "cats_from": ["mentor"],
+                        "cats_to": ["app"],
+                        "mutual": False,
+                        "constraints": ["-mentor/app", "-parent/child"],
+                    },
+                    involved_cats=involved_cats,
+                )
+            )
+
+
 class TestRelationshipTiers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -744,9 +1482,8 @@ class TestRelationshipTiers(unittest.TestCase):
 
         cls.thresholds = list(config["relationship"]["value_intervals"].values())
 
-        Cat.disable_random = True
-        cls.cat1 = Cat()
-        cls.cat2 = Cat()
+        cls.cat1 = cat_factory.create_cat()
+        cls.cat2 = cat_factory.create_cat()
 
     def tearDown(self):
         self.cat1.relationships = {}
@@ -1060,10 +1797,9 @@ class TestRelationshipTiersMultiCat(unittest.TestCase):
 
         cls.thresholds = list(config["relationship"]["value_intervals"].values())
 
-        Cat.disable_random = True
-        cls.cat1 = Cat()
-        cls.cat2 = Cat()
-        cls.cat3 = Cat()
+        cls.cat1 = cat_factory.create_cat()
+        cls.cat2 = cat_factory.create_cat()
+        cls.cat3 = cat_factory.create_cat()
 
     def tearDown(self):
         self.cat1.relationships = {}
@@ -1353,20 +2089,14 @@ class TestRelationshipTiersMultiCat(unittest.TestCase):
 
 
 class TestCatConstraint(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        Cat.disable_random = True
-
     def test_ages(self):
-        cat = Cat(disable_random=True)
+        cat = cat_factory.create_cat(moons=0)
 
         # ages used
         newborn = CatAge.NEWBORN
         age = CatAge.ADULT
         unmatched_age = CatAge.SENIOR
 
-        # newborn-specific
-        cat.age = CatAge.NEWBORN
         with self.subTest("empty newborn"):
             self.assertFalse(event_for_cat(cat=cat, cat_info={"age": []}))
         with self.subTest('"any" newborn'):
@@ -1377,7 +2107,7 @@ class TestCatConstraint(unittest.TestCase):
             self.assertTrue(event_for_cat(cat=cat, cat_info={"age": [newborn]}))
 
         # set cat age to the general testing age
-        cat.age = age
+        cat.moons = 60
 
         # general
         with self.subTest("empty"):
@@ -1406,7 +2136,7 @@ class TestCatConstraint(unittest.TestCase):
             )
 
     def test_group(self):
-        cat = Cat()
+        cat = cat_factory.create_cat()
         test_dict = {
             CatGroup.STARCLAN: CatGroup.STARCLAN_ID,
             CatGroup.DARK_FOREST: CatGroup.DARK_FOREST_ID,
@@ -1437,7 +2167,7 @@ class TestCatConstraint(unittest.TestCase):
             self.assertTrue(event_for_cat(cat=cat, cat_info={"group": ["-no_group"]}))
 
         # doesn't match another cat
-        other_cat = Cat()
+        other_cat = cat_factory.create_cat()
         other_cat.status.add_to_group(CatGroup.STARCLAN_ID)
         with self.subTest(f"doesn't match other cat's group"):
             self.assertTrue(
@@ -1492,8 +2222,8 @@ class TestCatConstraint(unittest.TestCase):
             "match:r_c": CatGroup.PLAYER_CLAN_ID,
         }
         game.used_group_IDs["5"] = CatGroup.OTHER_CLAN
-        cat = Cat()
-        other_cat = Cat()
+        cat = cat_factory.create_cat()
+        other_cat = cat_factory.create_cat()
 
         # checking current standing
         for group, ID in test_dict.items():
@@ -1610,7 +2340,7 @@ class TestCatConstraint(unittest.TestCase):
 
     def test_statuses(self):
         statuses = [s for s in [*CatRank] if s.is_any_clancat_rank()]
-        cat = Cat(disable_random=True)
+        cat = cat_factory.create_cat()
 
         with self.subTest("empty"):
             self.assertTrue(event_for_cat(cat=cat, cat_info={"status": []}))
@@ -1630,30 +2360,11 @@ class TestCatConstraint(unittest.TestCase):
                     event_for_cat(cat=cat, cat_info={"status": [f"-{status.value}"]})
                 )
 
-    def test_statuses_lost(self):
-        cat = Cat(status_dict=StatusDict(rank=CatRank.WARRIOR))
-        cat.become_lost()
-
-        with self.subTest("rank-constrained", rank="lost"):
-            self.assertTrue(event_for_cat(cat=cat, cat_info={"status": ["lost"]}))
-        with self.subTest('"any"', age="lost"):
-            self.assertTrue(event_for_cat(cat=cat, cat_info={"status": ["any"]}))
-        with self.subTest("unmatched - different Clan rank", age="lost"):
-            self.assertFalse(
-                event_for_cat(cat=cat, cat_info={"status": [CatRank.LEADER]})
-            )
-        with self.subTest("unmatched - same as former rank", age="lost"):
-            self.assertFalse(
-                event_for_cat(cat=cat, cat_info={"status": [CatRank.WARRIOR]})
-            )
-        with self.subTest("exclusionary", age="lost"):
-            self.assertFalse(event_for_cat(cat=cat, cat_info={"status": [f"-lost"]}))
-
     def test_status_history(self):
         return  # temp patch until the test can be fixed proper
         ranks = [*CatRank]
 
-        cat = Cat()
+        cat = cat_factory.create_cat()
         for old_rank, new_rank in permutations(ranks, 2):
             cat.status.generate_new_status(rank=old_rank)
 
@@ -1663,7 +2374,8 @@ class TestCatConstraint(unittest.TestCase):
             elif old_rank.is_any_clancat_rank():
                 cat.leave_clan(new_social_status=CatSocial(new_rank.value))
             elif new_rank.is_any_clancat_rank():
-                cat.add_to_clan()
+                add_to_clan(cat)
+                add_dependents_to_clan(cat)
                 cat.rank_change(new_rank=new_rank)
             else:
                 raise Exception(
@@ -1729,7 +2441,7 @@ class TestCatConstraint(unittest.TestCase):
         """
         Checks if the `must_have_both` works.
         """
-        cat = Cat()
+        cat = cat_factory.create_cat()
 
         # has both
         with self.subTest("has both"):
@@ -1849,7 +2561,7 @@ class TestCatConstraint(unittest.TestCase):
         Runs adult & kit traits.
         :return:
         """
-        cat = Cat()
+        cat = cat_factory.create_cat()
 
         # general
         with self.subTest('"any"'):
@@ -1883,7 +2595,7 @@ class TestCatConstraint(unittest.TestCase):
                 self.assertTrue(event_for_cat(cat=cat, cat_info={"trait": ["-bold"]}))
 
     def test_skill(self):
-        cat = Cat()
+        cat = cat_factory.create_cat()
         cat.personality = Personality(trait="adventurous")
         cat.skills.primary = Skill(SkillPath.HUNTER, points=9)
         cat.skills.secondary = None
@@ -2002,7 +2714,7 @@ class TestCatConstraint(unittest.TestCase):
                     )
 
     def test_backstory(self):
-        cat = Cat(backstory="clan_founder")
+        cat = cat_factory.create_cat(backstory="clan_founder")
 
         # general
         with self.subTest('"any"'):
@@ -2058,8 +2770,8 @@ class TestCatConstraint(unittest.TestCase):
             )
 
     def test_gender(self):
-        male = Cat(gender="male")
-        female = Cat(gender="female")
+        male = cat_factory.create_cat(gender="male")
+        female = cat_factory.create_cat(gender="female")
 
         with self.subTest("empty"):
             self.assertTrue(event_for_cat(cat=male, cat_info={"gender": []}))
@@ -2082,16 +2794,16 @@ class TestCatConstraint(unittest.TestCase):
             self.assertFalse(event_for_cat(cat=female, cat_info={"gender": ["male"]}))
 
     def test_health(self):
-        working_cat = Cat()
-        broken_cat = Cat()
-        Cat.disable_random = True
-        broken_cat.get_injured(name="broken bone")
-        ill_cat = Cat()
-        ill_cat.get_ill(name="greencough")
-        born_para_cat = Cat()
-        born_para_cat.get_permanent_condition(name="paralyzed", born_with=True)
-        acquired_para_cat = Cat()
-        acquired_para_cat.get_permanent_condition(name="paralyzed", born_with=False)
+        working_cat = cat_factory.create_cat()
+        broken_cat = cat_factory.create_cat()
+
+        gain_temporary_condition(broken_cat, "broken_bone")
+        ill_cat = cat_factory.create_cat()
+        gain_temporary_condition(ill_cat, "greencough")
+        born_para_cat = cat_factory.create_cat()
+        gain_permanent_condition(born_para_cat, "paralyzed", is_congenital=True)
+        acquired_para_cat = cat_factory.create_cat()
+        gain_permanent_condition(acquired_para_cat, "paralyzed", is_congenital=False)
 
         # cat must be working and is
         with self.subTest("must work and is working"):
@@ -2119,7 +2831,7 @@ class TestCatConstraint(unittest.TestCase):
 
         # cat should have a condition and does
         test_dict = {
-            broken_cat: ["broken bone"],
+            broken_cat: ["broken_bone"],
             ill_cat: ["greencough"],
             born_para_cat: ["paralyzed"],
         }

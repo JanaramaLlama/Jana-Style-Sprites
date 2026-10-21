@@ -1,6 +1,6 @@
 [
     {
-        "id": "general_formerclancat_dead_thoughts",
+        "event_id": "general_formerclancat_dead_thoughts_sc",
         "strings": [
             "Feels happy to be among StarClan",
             "Wonders if any of {PRONOUN/m_c/poss} old Clan is here",
@@ -10,15 +10,7 @@
         "involved_cats": {
             "m_c": {
                 "past_status": [
-                    "leader",
-                    "deputy",
-                    "warrior",
-                    "medicine cat",
-                    "medicine cat apprentice",
-                    "apprentice",
-                    "mediator",
-                    "mediator apprentice",
-                    "kitten"
+                    "clancat"
                 ]
             }
         }

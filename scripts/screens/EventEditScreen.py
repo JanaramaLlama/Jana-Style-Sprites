@@ -7,42 +7,43 @@ import pygame
 import pygame_gui
 import ujson
 
-from scripts.cat.cats import Cat, BACKSTORIES, create_option_preview_cat
+from scripts.cat.cats import Cat, BACKSTORIES
+from scripts.cat.constants import (
+    TEMPORARY_CONDITIONS,
+    CONDITION_GROUPS,
+    PERMANENT_CONDITIONS,
+)
+from scripts.cat.factories.create_example_cat import create_option_preview_cat
 from scripts.cat.pelts import Pelt
 from scripts.cat.personality import Personality
-from scripts.cat.skills import SkillPath
-from scripts.cat_relations.enums import rel_type_tiers
-from scripts.events_module.short.condition_events import Condition_Events
-
-from scripts.events_module.short.scar_events import Scar_Events
-from scripts.events_module.short.short_event import ShortEvent
-from scripts.game_structure import image_cache, constants
-from scripts.game_structure import game
 from scripts.cat.pronouns import get_default_pronouns
+from scripts.cat.skills import SkillPath
+from scripts.cat.sprites.display_sprites import generate_sprite
+from scripts.cat_relations.enums import rel_type_tiers
+from scripts.events_module.text_adjust import process_text
+from scripts.game_structure import game
+from scripts.game_structure import image_cache, constants
 from scripts.game_structure.screen_settings import MANAGER
+from scripts.screens.Screens import Screens
+from scripts.screens.enums import GameScreen
+from scripts.ui.elements.checkbox import UICheckbox
 from scripts.ui.elements.collapsible_container import UICollapsibleContainer
 from scripts.ui.elements.dropdown import UIDropDown
 from scripts.ui.elements.modified_image import UIModifiedImage
-from scripts.ui.elements.checkbox import UICheckbox
-from scripts.ui.elements.scrolling_button_list import UIScrollingButtonList
-from scripts.ui.elements.scrolling_dropdown import UIScrollingDropDown
 from scripts.ui.elements.modified_scrolling_container import (
     UIModifiedScrollingContainer,
 )
-from scripts.ui.elements.text_box_tweaked import UITextBoxTweaked
+from scripts.ui.elements.scrolling_button_list import UIScrollingButtonList
+from scripts.ui.elements.scrolling_dropdown import UIScrollingDropDown
 from scripts.ui.elements.surface_image_button import UISurfaceImageButton
-from scripts.ui.windows.editor_save_check import EditorSaveCheck
-from scripts.ui.windows.editor_missing_info import EditorMissingInfoWindow
-from scripts.screens.RelationshipScreen import RelationshipScreen
-from scripts.screens.Screens import Screens
-from scripts.screens.enums import GameScreen
+from scripts.ui.elements.text_box_tweaked import UITextBoxTweaked
 from scripts.ui.generate_box import get_box, BoxStyles
 from scripts.ui.generate_button import get_button_dict, ButtonStyles
 from scripts.ui.icon import Icon
-from scripts.ui.theme import get_text_box_theme
-from scripts.cat.sprites.display_sprites import generate_sprite
-from scripts.events_module.text_adjust import process_text
 from scripts.ui.scale import ui_scale, ui_scale_dimensions
+from scripts.ui.theme import get_text_box_theme
+from scripts.ui.windows.editor_missing_info import EditorMissingInfoWindow
+from scripts.ui.windows.editor_save_check import EditorSaveCheck
 
 
 class EventEditScreen(Screens):
@@ -136,6 +137,9 @@ class EventEditScreen(Screens):
     new_cat_bools: list = TAGS["new_cat"]["bool_settings"]
     """New cat tag list. Holds tag name, setting, and conflicts."""
 
+    new_cat_species: list = list(constants.SPECIES["species"].keys())
+    """All species available to new cats."""
+
     new_cat_ranks: list = all_ranks.copy()
     """All ranks available to new cats."""
     for rank in TAGS["new_cat"]["disallowed_ranks"]:
@@ -148,23 +152,18 @@ class EventEditScreen(Screens):
     new_cat_genders: list = TAGS["new_cat"]["genders"]
     """List of all gender tags available to new cats"""
 
-    all_injury_pools: dict = constants.INJURY_GROUPS
+    all_injury_pools: dict = CONDITION_GROUPS
     """Dict of all injury pools. Key is pool name, value is the injuries within the pool."""
-    all_possible_injuries: list = constants.EVENT_ALLOWED_CONDITIONS
+    all_possible_injuries: list = list(TEMPORARY_CONDITIONS.keys()) + list(
+        PERMANENT_CONDITIONS.keys()
+    )
     """List of all possible injuries/conditions."""
     fatal_conditions: list = []
     """We need this for death history validity checking. This is a list of all conditions that can kill."""
     for condition in all_possible_injuries:
-        if Condition_Events.INJURIES.get(condition):
-            for age in Condition_Events.INJURIES[condition]["mortality"]:
-                if Condition_Events.INJURIES[condition]["mortality"][age]:
-                    fatal_conditions.append(condition)
-                    break
-                else:
-                    break
-        elif Condition_Events.ILLNESSES.get(condition):
-            for age in Condition_Events.ILLNESSES[condition]["mortality"]:
-                if Condition_Events.ILLNESSES[condition]["mortality"][age]:
+        if TEMPORARY_CONDITIONS.get(condition):
+            for age in TEMPORARY_CONDITIONS[condition]["mortality"]:
+                if TEMPORARY_CONDITIONS[condition]["mortality"][age]:
                     fatal_conditions.append(condition)
                     break
                 else:
@@ -366,6 +365,7 @@ class EventEditScreen(Screens):
         self.new_cat_element = {}
         self.new_cat_checkbox = {}
         self.cat_story_element = {}
+        self.new_species_element = {}
         self.new_status_element = {}
         self.new_age_element = {}
         self.new_gender_element = {}
@@ -1629,6 +1629,7 @@ class EventEditScreen(Screens):
         self.selected_new_cat = None
         self.new_cat_checkbox = {}
         self.cat_story_element = {}
+        self.new_species_element = {}
         self.new_status_element = {}
         self.new_age_element = {}
         self.new_gender_element = {}
@@ -2237,16 +2238,7 @@ class EventEditScreen(Screens):
                 dead_cats.append(cat)
 
         for block in self.injury_block_list:
-            if (
-                set(block["injuries"]).intersection(set(Scar_Events.scar_allowed))
-                or block["scars"]
-            ):
-                injured_cats.extend(block["cats"])
-                # scar-able injuries are generally also possibly fatal, so plop them in dead
-                dead_cats.extend(block["cats"])
-            # injuries that don't scar but DO kill
-            elif set(block["injuries"]).intersection(set(self.fatal_conditions)):
-                dead_cats.extend(block["cats"])
+            pass
 
         death_histories = []
         injury_histories = []
@@ -3195,6 +3187,7 @@ class EventEditScreen(Screens):
         cat_type = []
         stories = []
         pool = []
+        species = []
         rank = []
         age = []
         gender = []
@@ -3216,6 +3209,8 @@ class EventEditScreen(Screens):
                             pool = pool_name
                 else:
                     pool = []
+            elif "species" in tag:
+                rank = [tag.replace("species:", "")]
             elif "status" in tag:
                 rank = [tag.replace("status:", "")]
             elif "age" in tag:
@@ -3232,6 +3227,7 @@ class EventEditScreen(Screens):
         self.cat_story_element["list"].set_selected_list(cat_type)
         self.backstory_element["pools"].set_selected_list(pool)
         self.backstory_element["list"].set_selected_list(stories)
+        self.new_species_element["list"].set_selected_list(species)
         self.new_status_element["list"].set_selected_list(rank)
         self.new_age_element["list"].set_selected_list(age)
         self.new_gender_element["list"].set_selected_list(gender)
@@ -3291,6 +3287,28 @@ class EventEditScreen(Screens):
 
         if new_story_tag and not existing_tag:
             selected_cat_info.append(new_story_tag)
+
+        # SPECIES
+        if self.new_species_element["list"].selected_list:
+            species = self.new_species_element["list"].selected_list[0]
+        else:
+            species = None
+
+        new_species_tag = f"species:{species}" if species else None
+
+        existing_tag = False
+        for tag in selected_cat_info.copy():
+            if "species" in tag and tag != new_species_tag:
+                existing_tag = True
+                selected_cat_info.remove(tag)
+                break
+            elif tag == new_species_tag:
+                existing_tag = True
+                break
+            existing_tag = False
+
+        if new_species_tag and not existing_tag:
+            selected_cat_info.append(new_species_tag)
 
         # RANK
         if self.new_status_element["list"].selected_list:
@@ -6165,6 +6183,9 @@ class EventEditScreen(Screens):
         # BACKSTORY
         self.create_story_editor()
 
+        # SPECIES
+        self.create_new_cat_species_editor()
+
         # STATUS
         self.create_new_cat_status_editor()
 
@@ -6345,7 +6366,7 @@ class EventEditScreen(Screens):
             line_spacing=1,
             manager=MANAGER,
             container=self.editor_container,
-            anchors={"top_target": self.editor_element["backstory"]},
+            anchors={"top_target": self.editor_element["species"]},
         )
         chosen_status = []
         for tag in self.new_cat_block_dict[self.selected_new_cat]:
@@ -6360,13 +6381,44 @@ class EventEditScreen(Screens):
             child_trigger_close=True,
             parent_reflect_selection=True,
             anchors={
-                "top_target": self.editor_element["backstory"],
+                "top_target": self.editor_element["species"],
                 "left_target": self.new_status_element["text"],
             },
             manager=MANAGER,
             starting_selection=chosen_status,
         )
         self.create_divider(self.new_status_element["text"], "rank")
+
+    def create_new_cat_species_editor(self):
+        self.new_species_element["text"] = UITextBoxTweaked(
+            "screens.event_edit.new_cat_species_info",
+            ui_scale(pygame.Rect((0, 14), (260, -1))),
+            object_id=get_text_box_theme("#text_box_30_horizleft_pad_10_10"),
+            line_spacing=1,
+            manager=MANAGER,
+            container=self.editor_container,
+            anchors={"top_target": self.editor_element["backstory"]},
+        )
+        chosen_species = []
+        for tag in self.new_cat_block_dict[self.selected_new_cat]:
+            if tag in self.new_cat_species:
+                chosen_species = [tag]
+        self.new_species_element["list"] = UIDropDown(
+            ui_scale(pygame.Rect((0, 26), (180, 30))),
+            parent_text="species",
+            item_list=self.new_cat_species,
+            disable_selection=False,
+            container=self.editor_container,
+            child_trigger_close=True,
+            parent_reflect_selection=True,
+            anchors={
+                "top_target": self.editor_element["backstory"],
+                "left_target": self.new_species_element["text"],
+            },
+            manager=MANAGER,
+            starting_selection=chosen_species,
+        )
+        self.create_divider(self.new_species_element["text"], "species")
 
     def create_story_editor(self):
         self.cat_story_element["text"] = UITextBoxTweaked(

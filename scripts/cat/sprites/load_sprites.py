@@ -17,21 +17,48 @@ class Sprites:
     cat_tints = {}
     white_patches_tints = {}
     clan_symbols = []
+    empty_indexes = []
+
+    @classmethod
+    def load_pelt_recipes(cls, folder):
+        setattr(cls, f"PELT_RECIPES_{folder}", {})
+        for file in os.listdir(f"sprites/{folder}/dicts/pelt_recipes"):
+            with open(
+                os.path.join(f"sprites/{folder}/dicts/pelt_recipes", file),
+                "r",
+                encoding="utf-8",
+            ) as read_file:
+                temp_read = ujson.loads(read_file.read())
+
+            getattr(cls, f"PELT_RECIPES_{folder}")[temp_read["name"]] = temp_read
+
+        with open(
+            f"sprites/{folder}/dicts/pelt_to_recipe.json", "r", encoding="utf-8"
+        ) as read_file:
+            setattr(cls, f"PELT_TO_RECIPE_{folder}", ujson.loads(read_file.read()))
+
+        with open(
+            f"sprites/{folder}/dicts/pelt_color_palettes.json", "r", encoding="utf-8"
+        ) as read_file:
+            setattr(cls, f"PELT_COLOR_PALETTES_{folder}", ujson.loads(read_file.read()))
 
     INDIVIDUAL_DATA_JSONS = (
+        "EYE",
+        "GENERATION_GROUP",
+        "PELT_MASK",
         "POSE",
         "SKIN",
         "TORTIE",
-        "PELT",
-        "EYE",
-        "WHITE_MOSTLY",
+        "TORTIE_PATCH_COMBOS",
+        "WHITE_PATCH_COMBOS",
         "WHITE_HIGH",
-        "WHITE_MID",
         "WHITE_LITTLE",
-        "WHITE_VITILIGO",
+        "WHITE_MID",
+        "WHITE_MOSTLY",
         "WHITE_POINTS",
+        "WHITE_VITILIGO",
     )
-    SHARED_DATA_JSONS = ("COLLAR", "WILD", "PLANT", "SCAR", "SCAR_MISSING_PART")
+    SHARED_DATA_JSONS = ("COLLAR", "WILD", "PLANT", "SCAR")
 
     if not constants.SPRITE_FOLDERS:
         raise Exception("[SPS] Cannot find sprite folders or none exist")
@@ -52,15 +79,34 @@ class Sprites:
 
         for f in constants.SPRITE_FOLDERS:
             for data in Sprites.INDIVIDUAL_DATA_JSONS:
-                if "TORTIE" in data:
+                if "COMBOS" in data:
+                    filename = data.split("_")
+                    filename = filename[0] + "_" + filename[1] + "ES_" + filename[2]
+                elif "TORTIE" in data:
                     filename = data + "_PATCHES"
                 elif "WHITE" in data:
                     filename = data.split("_")
                     filename = filename[0] + "_PATCHES_" + filename[1]
+                elif "PELT_MASK" in data:
+                    filename = "PELT_PARTS_MASKS"
                 else:
                     filename = data
+
+                if "COMBOS" in data:
+                    with open(
+                        f"sprites/{f}/dicts/{filename.lower()}.json",
+                        "r",
+                        encoding="utf-8",
+                    ) as read_file:
+                        setattr(self, f"{data}_{f}", ujson.loads(read_file.read()))
+                    continue
+                elif "GENERATION_GROUP" in data or "PELT_MASK" in data:
+                    filename = filename + "_DATA"
+                else:
+                    filename = filename + "_SPRITE_DATA"
+
                 with open(
-                    f"sprites/{f}/dicts/{filename.lower()}_sprite_data.json",
+                    f"sprites/{f}/dicts/{filename.lower()}.json",
                     "r",
                     encoding="utf-8",
                 ) as read_file:
@@ -71,15 +117,11 @@ class Sprites:
                 getattr(self, f"POSE_DATA_{f}")["sheet_layout"],
             )
             self.load_tints(f)
+            self.load_pelt_recipes(f)
 
         for data in Sprites.SHARED_DATA_JSONS:
-            if "SCAR_MISSING_PART" in data:
-                filename = data.split("_")
-                filename = filename[0] + "_" + filename[1]
-            else:
-                filename = data
             with open(
-                f"sprites/dicts/{filename.lower()}_sprite_data.json",
+                f"sprites/dicts/{data.lower()}_sprite_data.json",
                 "r",
                 encoding="utf-8",
             ) as read_file:
@@ -151,6 +193,10 @@ class Sprites:
                 if no_index:
                     full_name = f"{name}"
                 else:
+                    if i in self.empty_indexes:
+                        i += 1
+                        continue
+
                     full_name = f"{name}{i}"
 
                 try:
@@ -244,21 +290,20 @@ class Sprites:
             del width, height  # unneeded
 
             data_jsons = (
-                getattr(self, f"EYE_DATA_{f}"),
-                getattr(self, f"PELT_DATA_{f}"),
-                getattr(self, f"WHITE_MOSTLY_DATA_{f}"),
-                getattr(self, f"WHITE_HIGH_DATA_{f}"),
-                getattr(self, f"WHITE_MID_DATA_{f}"),
-                getattr(self, f"WHITE_LITTLE_DATA_{f}"),
-                getattr(self, f"WHITE_VITILIGO_DATA_{f}"),
-                getattr(self, f"WHITE_POINTS_DATA_{f}"),
-                getattr(self, f"TORTIE_DATA_{f}"),
-                getattr(self, f"SKIN_DATA_{f}"),
-                getattr(self, f"SCAR_DATA"),
-                getattr(self, f"SCAR_MISSING_PART_DATA"),
-                getattr(self, f"PLANT_DATA"),
-                getattr(self, f"WILD_DATA"),
                 getattr(self, f"COLLAR_DATA"),
+                getattr(self, f"EYE_DATA_{f}"),
+                getattr(self, f"PELT_MASK_DATA_{f}"),
+                getattr(self, f"PLANT_DATA"),
+                getattr(self, f"SCAR_DATA"),
+                getattr(self, f"SKIN_DATA_{f}"),
+                getattr(self, f"TORTIE_DATA_{f}"),
+                getattr(self, f"WHITE_HIGH_DATA_{f}"),
+                getattr(self, f"WHITE_LITTLE_DATA_{f}"),
+                getattr(self, f"WHITE_MID_DATA_{f}"),
+                getattr(self, f"WHITE_MOSTLY_DATA_{f}"),
+                getattr(self, f"WHITE_POINTS_DATA_{f}"),
+                getattr(self, f"WHITE_VITILIGO_DATA_{f}"),
+                getattr(self, f"WILD_DATA"),
             )
             pose_data = getattr(self, f"POSE_DATA_{f}")
 
@@ -335,7 +380,63 @@ class Sprites:
                 else:
                     self.load_sheet(data["spritesheet"], data["sprite_list"], f)
 
+            # patch combos
+            for category, combos in getattr(self, f"WHITE_PATCH_COMBOS_{f}").items():
+                self.create_patch_combo(
+                    combos=combos,
+                    sheet_name="patches_white_",
+                    folder=f,
+                    white_category=category,
+                )
+
+            self.create_patch_combo(
+                combos=getattr(self, f"TORTIE_PATCH_COMBOS_{f}"),
+                sheet_name="patches_tortie",
+                folder=f,
+            )
+
         self.load_symbols()
+
+    def create_patch_combo(
+        self, combos: dict, sheet_name: str, folder: int, white_category: str = ""
+    ):
+        # pulls the defaults from the pose_sprite_data.json file
+        sprites_x = getattr(self, f"sheet_layout_{folder}")[0]
+        sprites_y = getattr(self, f"sheet_layout_{folder}")[1]
+        for name, patches in combos.items():
+            i = 0
+            for y in range(sprites_y):
+                for x in range(sprites_x):
+                    if i in self.empty_indexes:
+                        i += 1
+                        continue
+
+                    new_patch = pygame.Surface(
+                        (sprites.size, sprites.size),
+                        pygame.HWSURFACE | pygame.SRCALPHA,
+                    )
+
+                    for patch in patches:
+                        if white_category:
+                            for c in ("little", "mid", "high", "mostly"):
+                                match = patch.find(c)
+                                if match != -1:
+                                    length = len(c)
+                                    break
+                            addition = self.sprites[
+                                f"{sheet_name}{patch[match:length]}{folder}_{patch[length:]}{i}"
+                            ]
+                        else:
+                            addition = self.sprites[f"{sheet_name}{folder}_{patch}{i}"]
+                        new_patch.blit(
+                            addition,
+                            (0, 0),
+                        )
+
+                    self.sprites[
+                        f"{sheet_name}{white_category}{folder}_{name}{i}"
+                    ] = new_patch
+                    i += 1
 
     def load_sheet(self, spritesheet: str, sprite_names: list[list[str]], folder: int):
         """
