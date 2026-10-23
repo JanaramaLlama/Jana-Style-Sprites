@@ -5,7 +5,7 @@
         "fur length: long": []
     },
     "ran_weights": {
-        "default": [1, 1]
+        "default": [1, 1, 1]
     },
     "in_weights": {
         "fur length: short": [50, 10, 2],

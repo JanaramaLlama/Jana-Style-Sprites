@@ -43,7 +43,7 @@
         ""
     ],
     "fallback": {
-        "kitten": ["newborn"],
+       "kitten": ["newborn"],
         "adult": [
             "adolescent",
             "young adult",

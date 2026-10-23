@@ -196,19 +196,19 @@ class Pelt:
                         if pose == 3:
                             poses = (
                                 [f"adolescent_{fur_length}0"]
-                                if f"adolescent_{fur_length}0" in poses
+                                if f"adolescent0" in poses
                                 else poses
                             )
                         elif pose == 4:
                             poses = (
                                 [f"adolescent_{fur_length}1"]
-                                if f"adolescent_{fur_length}1" in poses
+                                if f"adolescent_1" in poses
                                 else poses
                             )
                         elif pose == 5:
                             poses = (
                                 [f"adolescent_{fur_length}2"]
-                                if f"adolescent_{fur_length}2" in poses
+                                if f"adolescent_2" in poses
                                 else poses
                             )
                     else:
@@ -220,17 +220,17 @@ class Pelt:
                             poses = ["adolescent2"] if "adolescent2" in poses else poses
                 elif age in (CatAge.YOUNG_ADULT, CatAge.ADULT, CatAge.SENIOR_ADULT):
                     if pose in (0, 9):
-                        poses = ["adult0"] if "adult0" in poses else poses
+                        poses = ["adult_short0"] if "adult0" in poses else poses
                     elif pose in (1, 10):
-                        poses = ["adult1"] if "adult1" in poses else poses
+                        poses = ["adult_short1"] if "adult1" in poses else poses
                     elif pose in (2, 11):
-                        poses = ["adult2"] if "adult2" in poses else poses
+                        poses = ["adult_short2"] if "adult2" in poses else poses
                     elif pose == 6:
-                        poses = ["adult3"] if "adult3" in poses else poses
+                        poses = ["adult_long0"] if "adult3" in poses else poses
                     elif pose == 7:
-                        poses = ["adult4"] if "adult4" in poses else poses
+                        poses = ["adult_long1"] if "adult4" in poses else poses
                     elif pose == 8:
-                        poses = ["adult5"] if "adult" in poses else poses
+                        poses = ["adult_long2"] if "adult" in poses else poses
                 elif age == CatAge.SENIOR and i > 0:
                     if pose in (3, 12):
                         poses = ["senior0"] if "senior0" in poses else poses
@@ -277,7 +277,7 @@ class Pelt:
                     None, "para_adolescent", fur_length
                 ),
                 "para_kitten": self._conversion_compare_poses(
-                    None, "para_adolescent", fur_length
+                    None, "para_kitten", fur_length
                 ),
             }
 
